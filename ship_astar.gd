@@ -15,7 +15,7 @@ static func find_path(start_poly: int, goal_poly: int, polygons: Array, neighbor
 	while open_set.size() > 0:
 		var current = get_lowest_fscore(open_set, f_score)
 		if current == goal_poly:
-			return reconstruct_path(came_from, current)
+			return polygons_to_waypoints(reconstruct_path(came_from, current), polygons, neighbors)
 
 		open_set.erase(current)
 		for neighbor in neighbors[current]:
@@ -29,6 +29,30 @@ static func find_path(start_poly: int, goal_poly: int, polygons: Array, neighbor
 
 	return []  # no path found
 
+static func polygons_to_waypoints(polygon_indices, polygons, neighbors) -> Array[Vector2]:
+	var path : Array[Vector2]
+	for i in range(polygon_indices.size() -1):
+		var curr_polygon = polygons[polygon_indices[i]]
+		var next_polygon = polygons[polygon_indices[i+1]]
+		var intersect = get_common_intersect(curr_polygon, next_polygon)
+		path.append(intersect)
+	return path
+		
+		
+static func get_common_intersect(current, next):
+	# find common vertex
+	var common_vertex
+	var index_other_common = -1
+	var index_curret_common = -1
+	var common_vertices = Array()
+	for c in range(current.size()):
+		var vert = current[c]
+		for n in range(next.size()):
+			var other_vert = next[n]
+			if(other_vert == vert):
+				common_vertices.append(vert)
+	# have single common_vertex
+	return (common_vertices[0] + common_vertices[1])/2
 
 static func reconstruct_path(came_from: Dictionary, current: int) -> Array:
 	var total_path = [current]
