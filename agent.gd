@@ -17,7 +17,7 @@ var neighbors
 var update_path_next = true
 
 var break_count : int
-
+var last_ship_polygon
 # This method is called on every tick to choose an action.  See README.md
 # for a detailed description of its arguments and return value.
 func action(_walls: Array[PackedVector2Array], _gems: Array[Vector2], 
@@ -25,20 +25,26 @@ func action(_walls: Array[PackedVector2Array], _gems: Array[Vector2],
 	polygons = _polygons
 	gems = _gems
 	neighbors = _neighbors
+	var curr_ship_polygon = ship_astar.find_polygon(ship.position, polygons)
+	if(curr_ship_polygon != last_ship_polygon):
+		force_update_path()
 	if(update_path_next ) : update_path()
+	
 	if(break_count > 0):
 		break_ship()
 	else:
 		follow_path(curr_path)
+	last_ship_polygon = curr_ship_polygon
 	return [spin, thrust, false]
 
 # Called every time the agent has bounced off a wall.
 func bounce():	
-	start_break()
+	consider_break()
 	force_update_path()
 # Called every time a gem has been collected.
 func gem_collected():
-	start_break()
+	consider_break()
+	
 	force_update_path()
 # Called every time a new level has been reached.
 func new_level():
@@ -66,14 +72,16 @@ func update_path():
 			target = ship_astar.polygon_center(polygons[point])
 		curr_path.append(target)
 	queue_redraw()
+	if(curr_path.size() > 1):
+		current_waypoint_index = 1
 		
 
 var current_waypoint_index = 0
 var waypoint_reach_dist = 50.0  # how close before moving to next point
-var facing_threshold = 0.4      # radians (~23°)
+var facing_threshold = 5  # radians (~23°)
 var stop_threshold = 0.08       # radians (~5°)
-
-
+var arrive_seconds = 2
+var break_speed_tolerace = 20
 var debug_target
 
 func follow_path(path: Array[Vector2]):
@@ -94,9 +102,8 @@ func follow_path(path: Array[Vector2]):
 			current_waypoint_index += 1
 			target = path[current_waypoint_index]
 			print("reached waypoint")
-			queue_redraw()
-			if(rad_to_deg(ship.velocity.angle_to(ship.position - target)) > 5):
-				start_break()
+			consider_break()
+			return
 		else:
 			# reached end of path
 			print("reached path_end")
@@ -116,22 +123,33 @@ func follow_path(path: Array[Vector2]):
 	var diff = wrapf(desired_angle - current_angle, -PI, PI)
 
 	# --- STEERING (turning) ---
-	if abs(diff) < stop_threshold:
+	if abs(diff) < deg_to_rad(facing_threshold):
 		spin = 0
 	else:
 		spin = int(sign(diff))  # simple left/right turn
 
 	# --- THRUST (forward acceleration) ---
 	# Only thrust when roughly facing the target
-	if abs(diff) < facing_threshold:
-		thrust = true
-	else:
-		thrust = false
+	
+	var dist_to_end = ship.position.distance_to(target)
+	var covered_distance = ship.velocity.length() * arrive_seconds
+	
+	var velocity_target_diff = desired_angle - ship.velocity.angle()
+	velocity_target_diff = wrapf(velocity_target_diff, -PI, PI)
+	
+	if ship.velocity.length() > break_speed_tolerace and  abs(velocity_target_diff) > deg_to_rad(facing_threshold):
+		# arrive do not overshoot
+		if(covered_distance > dist_to_end):
+			thrust = false
+			start_break()
+		else:
+			thrust = true
+	
+	if(spin == 0 and thrust == false):
+		if(covered_distance < dist_to_end):
+			thrust	= true
 
 	# Optionally slow down near end of path (ARRIVE behavior)
-	var dist_to_end = ship.position.distance_to(target)
-	if(dist_to_end < 100):
-		thrust = (ship.velocity.length() / 60) < dist_to_end
 		
 func _draw():
 	debug_path.clear_points()
@@ -146,7 +164,13 @@ func _draw():
 func start_break():
 	break_count = BREAKS
 
+var break_confirmed = false
 func break_ship():
+	if(break_confirmed == false and ship.velocity.length() < break_speed_tolerace):
+		break_count = 0
+		print("No need to break")
+		break_confirmed = false
+		
 	if break_count > 0:
 		var velocity_dir = ship.velocity.normalized()
 		var curr_heading = Vector2.RIGHT.rotated(ship.rotation)
@@ -162,11 +186,12 @@ func break_ship():
 			thrust = false
 		
 		print("BREAKS")
-		
-		if ship.velocity.length_squared() < 4:
+		break_confirmed = true
+		break_count -= 1
+		if ship.velocity.length_squared() < break_speed_tolerace:
 			print("Finsihed breaking")
-			force_update_path()
 			break_count = 0
+			break_confirmed = false
 			
 func force_update_path():
 	update_path_next = true		
@@ -191,3 +216,8 @@ func calc_gem_polygons():
 	if(gem_polygon.is_empty() == false) :return
 	for gem in gems:
 		gem_polygon[gem] = ship_astar.find_polygon(gem, polygons)
+		
+func consider_break():
+	var target=curr_path[current_waypoint_index]
+	if(ship.velocity.angle_to(target - ship.position) > deg_to_rad(facing_threshold)):
+		start_break()
