@@ -33,15 +33,16 @@ func action(_walls: Array[PackedVector2Array], _gems: Array[Vector2],
 	neighbors = _neighbors
 	
 	var curr_ship_polygon = ship_astar.find_polygon(ship.position, polygons)
-#	if(gems.size() <= 1):
-#		if(free_path(gems[0], true) == 1):
-#			kamikaze = true
-#			kamikaze_target = gems[0]
-#			shoot_on_bounce = true
-#			print("Will shoot when bounces")
+	if(gems.size() <= 1 and ship.lasers > 1):
+		if(free_path(gems[0], true) == 1):
+			kamikaze = true
+			kamikaze_target = gems[0]
+			shoot_on_bounce = true
+			print("Will shoot when bounces")
 	
 	if(curr_ship_polygon != last_ship_polygon):
 		force_update_path()
+		
 	if(update_path_next) : update_path()
 	
 	if(break_count > 0):
@@ -59,7 +60,7 @@ func bounce():
 	if(wall_hit_pos != null and ship.position.distance_squared_to(wall_hit_pos) < 50):
 		wall_hit_count +=1
 		wall_hit_pos = ship.position
-		if(wall_hit_count > 100):		
+		if(wall_hit_count > 10):		
 			shoot_on_bounce = true
 			wall_hit_count = 0
 			wall_hit_pos = ship.position
@@ -77,7 +78,6 @@ func gem_collected():
 	kamikaze_target = null
 	last_closest = null
 	force_update_path()
-	consider_brake()
 # Called every time a new level has been reached.
 func new_level():
 	kamikaze =false
@@ -166,21 +166,22 @@ func follow_path(path: Array[Vector2]):
 	
 	var velocity_target_diff = desired_angle - ship.velocity.angle()
 	velocity_target_diff = wrapf(velocity_target_diff, -PI, PI)
-	
+	if ship.velocity.length() > break_speed_tolerace * 2 and abs(velocity_target_diff) > deg_to_rad(facing_threshold * 2):
+		thrust = true
+	else:
+		thrust = false
 	if(spin == 0 and thrust == false):
 		thrust = true
 	
-#	if ship.velocity.length() > break_speed_tolerace * 4 and  abs(velocity_target_diff) > deg_to_rad(facing_threshold * 2):
-#		thrust = true
-		
 	# ARRIVE		
 	var dist = ship.position.distance_to(target)
 	var speed = ship.velocity.length()
 	var time_to_stop = speed / ship.ACCEL
 
 	if dist < speed * time_to_stop:
-		consider_brake()
-		thrust = false
+		if not (gems.size() == 1 and target.distance_to(gems[0]) < 10):
+			consider_brake()
+			thrust = false
 
 	# Optionally slow down near end of path (ARRIVE behavior)
 		
@@ -301,8 +302,8 @@ func free_path(target: Vector2, count_all_walls: bool = false):
 			var a = wall_points[i]
 			var b = wall_points[(i + 1) % wall_point_count]
 
-			var t = _segments_intersect_t(pos + Vector2.DOWN * ship.RADIUS*2, target, a, b)
-			var t2 = _segments_intersect_t(pos + Vector2.UP * ship.RADIUS *2 , target, a, b)
+			var t = _segments_intersect_t(pos + Vector2.DOWN * 30, target, a, b)
+			var t2 = _segments_intersect_t(pos + Vector2.UP * 30 , target, a, b)
 
 			if (t >= 0.0 and t <= 1.0) or (t2 >= 0.0 and t2 <= 1.0):
 				counter += 1
