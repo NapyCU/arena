@@ -4,16 +4,16 @@ static func find_path(start_poly: int, goal_poly: int, polygons: Array, neighbor
 	var open_set = [start_poly]
 	var came_from = {}
 	var g_score = {}
-	var f_score = {}
+	var cost = {}
 
 	for i in range(polygons.size()):
 		g_score[i] = INF
-		f_score[i] = INF
+		cost[i] = INF
 	g_score[start_poly] = 0
-	f_score[start_poly] = heuristic_cost_estimate(start_poly, goal_poly, polygons)
+	cost[start_poly] = heuristic(start_poly, goal_poly, polygons)
 
 	while open_set.size() > 0:
-		var current = get_lowest_fscore(open_set, f_score)
+		var current = get_lowest_fscore(open_set, cost)
 		if current == goal_poly:
 			return polygons_to_waypoints(reconstruct_path(came_from, current), polygons, neighbors)
 
@@ -23,7 +23,7 @@ static func find_path(start_poly: int, goal_poly: int, polygons: Array, neighbor
 			if tentative_g < g_score[neighbor]:
 				came_from[neighbor] = current
 				g_score[neighbor] = tentative_g
-				f_score[neighbor] = g_score[neighbor] + heuristic_cost_estimate(neighbor, goal_poly, polygons)
+				cost[neighbor] = g_score[neighbor] + heuristic(neighbor, goal_poly, polygons)
 				if neighbor not in open_set:
 					open_set.append(neighbor)
 
@@ -62,7 +62,7 @@ static func reconstruct_path(came_from: Dictionary, current: int) -> Array:
 	return total_path
 
 
-static func heuristic_cost_estimate(a: int, b: int, polygons: Array) -> float:
+static func heuristic(a: int, b: int, polygons: Array) -> float:
 	return polygon_distance(a, b, polygons)
 
 
@@ -85,11 +85,11 @@ static func find_polygon(point: Vector2, polygons: Array) -> int:
 			return i
 	return -1
 	
-static func get_lowest_fscore(open_set: Array, f_score: Dictionary) -> int:
+static func get_lowest_fscore(open_set: Array, cost: Dictionary) -> int:
 	var lowest = open_set[0]
-	var lowest_val = f_score[lowest]
+	var lowest_val = cost[lowest]
 	for node in open_set:
-		var val = f_score[node]
+		var val = cost[node]
 		if 	val < lowest_val:
 			lowest = node
 			lowest_val = val

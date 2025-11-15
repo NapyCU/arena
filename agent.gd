@@ -112,7 +112,7 @@ func update_path():
 var current_waypoint_index = 0
 var waypoint_reach_dist = 50  # how close before moving to next point
 var facing_threshold = 4  # radians (~23°)
-var safety_arrive_margin = 50
+var safety_arrive_margin = 25
 var break_speed_tolerace = 5
 var debug_target
 
@@ -125,6 +125,7 @@ func follow_path(path: Array[Vector2]):
 		return
 	
 	var target 
+
 	if(kamikaze):
 		target = kamikaze_target	
 		path.clear()
@@ -162,10 +163,10 @@ func follow_path(path: Array[Vector2]):
 
 	# Thrust
 	
-	var dist_to_end = ship.position.distance_to(target)
 	
 	var velocity_target_diff = desired_angle - ship.velocity.angle()
 	velocity_target_diff = wrapf(velocity_target_diff, -PI, PI)
+
 	if ship.velocity.length() > break_speed_tolerace * 2 and abs(velocity_target_diff) > deg_to_rad(facing_threshold * 2):
 		thrust = true
 	else:
@@ -174,9 +175,9 @@ func follow_path(path: Array[Vector2]):
 		thrust = true
 	
 	# ARRIVE		
-	var dist = ship.position.distance_to(target)
+	var dist = ship.position.distance_to(target) + safety_arrive_margin
 	var speed = ship.velocity.length()
-	var time_to_stop = speed / ship.ACCEL
+	var time_to_stop = speed / ship.ACCEL + break_remaining_rotation * (180 / rad_to_deg(ship.ROTATE_SPEED)) 
 
 	if dist < speed * time_to_stop:
 		if not (gems.size() == 1 and target.distance_to(gems[0]) < 10):
@@ -276,67 +277,48 @@ func consider_brake(tolerance_multiplier = 1):
 			start_brake()
 	else:
 		start_brake()
+		
 func free_path(target: Vector2, count_all_walls: bool = false):
 	var pos = ship.position
 	var dist_to_target = pos.distance_to(target)
 
-	var counter = 0
+	var ray_start1 = pos + Vector2.DOWN * ship.RADIUS
+	var ray_start2 = pos + Vector2.UP * ship.RADIUS
 
-	for wall in walls:
-		var wall_points = wall
-		var wall_point_count = wall_points.size()
+	var ray_end1 = target
+	var ray_end2 = target
 
-		# quick reject: check if wall is far away
-		# (distance from ship to wall's bounding box > dist_to_target)
+	var counter := 0
+
+	for wall_points in walls:
 		var wall_min = Vector2(INF, INF)
 		var wall_max = Vector2(-INF, -INF)
+		
+		# this should be faster
 		for p in wall_points:
 			wall_min = wall_min.min(p)
 			wall_max = wall_max.max(p)
 
 		var wall_center = (wall_min + wall_max) * 0.5
 		if pos.distance_to(wall_center) > dist_to_target + 50.0:
-			continue  # skip walls behind or beyond the target
+			continue
 
-		for i in range(wall_point_count):
+		# for each edee of wall
+		for i in range(wall_points.size()):
 			var a = wall_points[i]
-			var b = wall_points[(i + 1) % wall_point_count]
+			var b = wall_points[(i + 1) % wall_points.size()]
 
-			var t = _segments_intersect_t(pos + Vector2.DOWN * 30, target, a, b)
-			var t2 = _segments_intersect_t(pos + Vector2.UP * 30 , target, a, b)
+			var hit1 = Geometry2D.segment_intersects_segment(ray_start1, ray_end1, a, b)
+			var hit2 = Geometry2D.segment_intersects_segment(ray_start2, ray_end2, a, b)
 
-			if (t >= 0.0 and t <= 1.0) or (t2 >= 0.0 and t2 <= 1.0):
+			if hit1 != null or hit2 != null:
 				counter += 1
-				
 				if not count_all_walls:
 					return false
+
 				break
 
 	if count_all_walls:
 		return counter
 	else:
 		return counter == 0
-
-# this code was taken from itnernet
-
-func _segments_intersect_t(p1: Vector2, p2: Vector2, q1: Vector2, q2: Vector2) -> float:
-	var r = p2 - p1
-	var s = q2 - q1
-	var rxs = r.cross(s)
-	var q_p = q1 - p1
-	var q_pxr = q_p.cross(r)
-
-	if abs(rxs) < 0.0001 and abs(q_pxr) < 0.0001:
-		# collinear → treat as no valid intersection for a ray
-		return -1.0
-
-	if abs(rxs) < 0.0001:
-		# parallel
-		return -1.0
-
-	var t = q_p.cross(s) / rxs
-	var u = q_p.cross(r) / rxs
-
-	if t >= 0.0 and t <= 1.0 and u >= 0.0 and u <= 1.0:
-		return t   # intersection at parameter t
-	return -1.0
